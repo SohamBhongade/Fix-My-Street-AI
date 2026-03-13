@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'camera_screen.dart';
 import 'ai_preview_screen.dart';
-// Import your new AI screen
 import 'package:image_picker/image_picker.dart';
 
 class ReportScreen extends StatefulWidget {
@@ -21,6 +20,151 @@ class _ReportScreenState extends State<ReportScreen> {
     target: LatLng(25.7895, 55.9432),
     zoom: 14.5,
   );
+
+  // --- PROFESSIONAL GLASSMORPHIC SELECTION DIALOG ---
+  void _showImageSourceOptions(BuildContext context) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "SourceSelector",
+      barrierColor: Colors.black.withOpacity(0.7),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: anim1.value,
+          child: Opacity(
+            opacity: anim1.value,
+            child: AlertDialog(
+              backgroundColor: Colors.transparent,
+              contentPadding: EdgeInsets.zero,
+              content: ClipRRect(
+                borderRadius: BorderRadius.circular(30),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.all(25),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF161B22).withOpacity(0.85),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(
+                        color: Colors.cyanAccent.withOpacity(0.2),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          "SELECT SOURCE",
+                          style: TextStyle(
+                            color: Colors.cyanAccent,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 2.5,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 25),
+                        _buildSourceOption(
+                          context,
+                          icon: Icons.camera_enhance_rounded,
+                          label: "LIVE CAMERA",
+                          subtitle: "AI real-time detection",
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final String? imagePath = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const CameraScreen(),
+                              ),
+                            );
+                            if (imagePath != null && mounted)
+                              _navigateToAI(imagePath);
+                          },
+                        ),
+                        const SizedBox(height: 15),
+                        _buildSourceOption(
+                          context,
+                          icon: Icons.grid_view_rounded,
+                          label: "GALLERY",
+                          subtitle: "Upload existing report",
+                          onTap: () async {
+                            Navigator.pop(context);
+                            final ImagePicker picker = ImagePicker();
+                            final XFile? image = await picker.pickImage(
+                              source: ImageSource.gallery,
+                            );
+                            if (image != null && mounted)
+                              _navigateToAI(image.path);
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSourceOption(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(15),
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.cyanAccent.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: Colors.cyanAccent, size: 28),
+            ),
+            const SizedBox(width: 15),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _navigateToAI(String path) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AIPreviewScreen(imagePath: path)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,11 +225,11 @@ class _ReportScreenState extends State<ReportScreen> {
                 ),
                 if (!_isMapExpanded) ...[
                   const SizedBox(height: 20),
-                  _buildCategoryList(), // Updated for 1-line fit
+                  _buildCategoryList(),
                   const Spacer(),
                   _buildVolunteerSection(),
                   const SizedBox(height: 15),
-                  _buildReportButton(), // Updated with AI navigation
+                  _buildReportButton(),
                   const SizedBox(height: 20),
                 ],
               ],
@@ -125,7 +269,7 @@ class _ReportScreenState extends State<ReportScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "FIX MY STREET",
+                "FIX MY STREET AI",
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 22,
@@ -152,7 +296,6 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  // UPDATED: Fits all items in 1 line using a Row with Expanded/Flexible
   Widget _buildCategoryList() {
     final List<Map<String, dynamic>> cats = [
       {"icon": Icons.warning_rounded, "label": "Pothole"},
@@ -200,15 +343,15 @@ class _ReportScreenState extends State<ReportScreen> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white10),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Icon(
+          Icon(
             Icons.cleaning_services_rounded,
             color: Colors.white70,
             size: 22,
           ),
-          const SizedBox(width: 15),
-          const Expanded(
+          SizedBox(width: 15),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -233,7 +376,6 @@ class _ReportScreenState extends State<ReportScreen> {
     );
   }
 
-  // UPDATED: Handles the logic to jump from Camera -> AI Preview
   Widget _buildReportButton() {
     return Container(
       width: double.infinity,
@@ -250,23 +392,7 @@ class _ReportScreenState extends State<ReportScreen> {
           backgroundColor: Colors.transparent,
           shadowColor: Colors.transparent,
         ),
-        onPressed: () async {
-          // 1. Wait for photo path from Camera
-          final String? imagePath = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const CameraScreen()),
-          );
-
-          // 2. If we got a photo, immediately go to the AI Preview Screen
-          if (imagePath != null && mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AIPreviewScreen(imagePath: imagePath),
-              ),
-            );
-          }
-        },
+        onPressed: () => _showImageSourceOptions(context),
         child: const Text(
           "+ REPORT ISSUE",
           style: TextStyle(

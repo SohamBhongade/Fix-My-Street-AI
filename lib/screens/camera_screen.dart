@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import '../main.dart'; // This lets us access the 'cameras' list
+import '../main.dart'; // Accessing the global 'cameras' list
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -10,28 +10,53 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  late CameraController controller;
+  CameraController? controller;
+  int _selectedCameraIndex = 0; // 0 is usually back, 1 is usually front
 
   @override
   void initState() {
     super.initState();
-    // Initialize the first camera from the list
-    controller = CameraController(cameras[0], ResolutionPreset.high);
-    controller.initialize().then((_) {
-      if (!mounted) return;
-      setState(() {});
+    _initializeCamera(cameras[_selectedCameraIndex]);
+  }
+
+  Future<void> _initializeCamera(CameraDescription cameraDescription) async {
+    if (controller != null) {
+      await controller!.dispose();
+    }
+
+    controller = CameraController(
+      cameraDescription,
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
+
+    try {
+      await controller!.initialize();
+      if (mounted) setState(() {});
+    } catch (e) {
+      debugPrint("Camera Error: $e");
+    }
+  }
+
+  Future<void> _toggleCamera() async {
+    if (cameras.length < 2) return;
+
+    setState(() {
+      _selectedCameraIndex = (_selectedCameraIndex + 1) % cameras.length;
     });
+
+    await _initializeCamera(cameras[_selectedCameraIndex]);
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!controller.value.isInitialized) {
+    if (controller == null || !controller!.value.isInitialized) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
@@ -40,14 +65,56 @@ class _CameraScreenState extends State<CameraScreen> {
       );
     }
 
+    // --- SCALING CALCULATIONS FOR FULLSCREEN ---
+    final size = MediaQuery.of(context).size;
+    var scale = size.aspectRatio * controller!.value.aspectRatio;
+    if (scale < 1) scale = 1 / scale;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // 1. LIVE CAMERA FEED
-          Center(child: CameraPreview(controller)),
+          // 1. LIVE CAMERA FEED (PRO SCALING)
+          ClipRect(
+            child: Transform.scale(
+              scale: scale,
+              child: Center(child: CameraPreview(controller!)),
+            ),
+          ),
 
-          // 2. CAPTURE BUTTON (The "Action" happens here)
+          // 2. DARK GRADIENT OVERLAY (For a professional look)
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withOpacity(0.3),
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.6),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // 3. FLIP CAMERA BUTTON
+          Positioned(
+            bottom: 65,
+            right: 40,
+            child: IconButton(
+              icon: const Icon(
+                Icons.flip_camera_android_rounded,
+                color: Colors.white,
+                size: 35,
+              ),
+              onPressed: _toggleCamera,
+            ),
+          ),
+
+          // 4. CAPTURE BUTTON
           Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
@@ -55,10 +122,7 @@ class _CameraScreenState extends State<CameraScreen> {
               child: GestureDetector(
                 onTap: () async {
                   try {
-                    // Capture the image
-                    final image = await controller.takePicture();
-
-                    // EXIT the camera and send the file path back to the map
+                    final image = await controller!.takePicture();
                     if (mounted) {
                       Navigator.pop(context, image.path);
                     }
@@ -88,7 +152,7 @@ class _CameraScreenState extends State<CameraScreen> {
             ),
           ),
 
-          // 3. BACK BUTTON
+          // 5. CLOSE BUTTON
           Positioned(
             top: 50,
             left: 20,

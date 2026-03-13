@@ -1,8 +1,7 @@
 import 'dart:io';
-import 'dart:convert';
-import 'dart:ui'; // For the cool Glassmorphism blur
 import 'package:flutter/material.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class AIPreviewScreen extends StatefulWidget {
   final String imagePath;
@@ -13,285 +12,368 @@ class AIPreviewScreen extends StatefulWidget {
 }
 
 class _AIPreviewScreenState extends State<AIPreviewScreen> {
-  // STATE LOGIC
+  String? _selectedCategory;
+  String _coordinates = "Fetching GPS...";
+  String _streetName = "Locating street...";
+
+  // AI Status States
   bool _isAnalyzing = true;
-  bool _showSuccess = false; // The "Switch" for the success overlay
-  String _detectedIssue = "Analyzing...";
-  String _severity = "...";
-  String _priority = "...";
+  String _aiStatusText = "RUNNING AI ANALYSIS...";
+  bool _aiFailed = false;
+
+  final List<String> _categories = [
+    "Potholes",
+    "Faded Road Markings",
+    "Cracked Sidewalks",
+    "Broken Street Lights",
+    "Exposed Wiring",
+    "Malfunctioning Traffic Signals",
+    "Illegal Dumping",
+    "Overflowing Bins",
+    "Litter Accumulation",
+    "Graffiti",
+    "Broken Signs",
+    "Broken Guardrails",
+    "Broken pipelines",
+    "Water accumulation",
+    "Overgrown Vegetation",
+  ];
 
   @override
   void initState() {
     super.initState();
-    _analyzeImageWithGemini();
+    _getLocation();
+    _runFakeAI();
   }
 
-  // AI BRAIN LOGIC
-  Future<void> _analyzeImageWithGemini() async {
+  // --- SIMULATED AI LOGIC ---
+  Future<void> _runFakeAI() async {
+    await Future.delayed(
+      const Duration(seconds: 3),
+    ); // Simulate processing time
+    if (mounted) {
+      setState(() {
+        _isAnalyzing = false;
+        _aiFailed = true; // Set to true to show the error as requested
+        _aiStatusText = "AI ANALYSIS FAILED";
+      });
+    }
+  }
+
+  Future<void> _getLocation() async {
     try {
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: 'AIzaSyD5jCDm27LwmqJ8_kH0uu5-6xrsTWvznSs',
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
       );
-
-      final imageBytes = await File(widget.imagePath).readAsBytes();
-
-      final prompt = TextPart(
-        "Identify the urban maintenance issue in this photo. "
-        "Return ONLY a raw JSON object with keys 'type', 'severity', and 'priority'. "
-        "Example: {'type': 'Broken Bench', 'severity': 'Medium', 'priority': '3/5'}",
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
       );
+      Placemark place = placemarks[0];
 
-      final content = [
-        Content.multi([prompt, DataPart('image/jpeg', imageBytes)]),
-      ];
-
-      final response = await model
-          .generateContent(content)
-          .timeout(const Duration(seconds: 25));
-
-      final text = response.text;
-      if (text != null) {
-        // Cleaning up any Markdown code blocks Gemini might add
-        final cleanJson = text
-            .replaceAll('```json', '')
-            .replaceAll('```', '')
-            .trim();
-        final Map<String, dynamic> data = jsonDecode(cleanJson);
-
+      if (mounted) {
         setState(() {
-          _detectedIssue = data['type'] ?? "Unknown Issue";
-          _severity = data['severity'] ?? "Medium";
-          _priority = data['priority'] ?? "3/5";
+          _coordinates =
+              "${position.latitude.toStringAsFixed(4)}° N, ${position.longitude.toStringAsFixed(4)}° E";
+          _streetName = "${place.street}, ${place.subLocality}";
         });
       }
     } catch (e) {
-      debugPrint("GEMINI ERROR: $e");
-      setState(() {
-        _detectedIssue = "AI Sync Error";
-      });
-    } finally {
-      setState(() {
-        _isAnalyzing = false;
-      });
+      if (mounted) setState(() => _streetName = "Location logic error");
     }
+  }
+
+  String _getPriority(String? category) {
+    if (category == null) return "PENDING";
+    if ([
+      "Exposed Wiring",
+      "Malfunctioning Traffic Signals",
+      "Broken pipelines",
+      "Water accumulation",
+    ].contains(category)) {
+      return "HIGH (Hazardous)";
+    } else if ([
+      "Potholes",
+      "Faded Road Markings",
+      "Cracked Sidewalks",
+      "Broken Street Lights",
+      "Broken Signs",
+      "Broken Guardrails",
+    ].contains(category)) {
+      return "MEDIUM (Infrastructure)";
+    }
+    return "LOW (Aesthetic)";
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
-      body: Stack(
-        // Using Stack to layer the Success Overlay on top
-        children: [
-          Column(
-            children: [
-              // 1. THE PHOTO DISPLAY
-              Expanded(
-                flex: 3,
-                child: Stack(
-                  children: [
-                    Image.file(
-                      File(widget.imagePath),
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                    if (_isAnalyzing)
-                      Container(
-                        color: Colors.black54,
-                        child: const Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(
-                                color: Colors.cyanAccent,
-                              ),
-                              SizedBox(height: 20),
-                              Text(
-                                "AI ANALYZING IMAGE...",
-                                style: TextStyle(
-                                  color: Colors.cyanAccent,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          "REPORT PREVIEW",
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+        ),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.file(
+                File(widget.imagePath),
+                height: 220,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 25),
+
+            // --- AI AUTO CLASSIFICATION SECTION ---
+            _buildSectionHeader("AI AUTO CLASSIFICATION"),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: _aiFailed
+                    ? Colors.redAccent.withOpacity(0.05)
+                    : Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(15),
+                border: Border.all(
+                  color: _aiFailed
+                      ? Colors.redAccent.withOpacity(0.3)
+                      : Colors.white10,
                 ),
               ),
-
-              // 2. AI RESULTS CARD
-              Expanded(
-                flex: 2,
-                child: Container(
-                  padding: const EdgeInsets.all(25),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF161B22),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(30),
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: Column(
+                children: [
+                  Row(
                     children: [
-                      const Text(
-                        "AI CLASSIFICATION",
-                        style: TextStyle(
-                          color: Colors.cyanAccent,
-                          fontSize: 12,
-                          letterSpacing: 1.5,
-                        ),
+                      Icon(
+                        _isAnalyzing
+                            ? Icons.sync
+                            : (_aiFailed
+                                  ? Icons.error_outline
+                                  : Icons.auto_awesome),
+                        color: _isAnalyzing
+                            ? Colors.cyanAccent
+                            : (_aiFailed
+                                  ? Colors.redAccent
+                                  : Colors.greenAccent),
+                        size: 20,
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(width: 10),
                       Text(
-                        _detectedIssue,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
+                        _aiStatusText,
+                        style: TextStyle(
+                          color: _aiFailed
+                              ? Colors.redAccent
+                              : Colors.cyanAccent,
                           fontWeight: FontWeight.bold,
+                          fontSize: 13,
                         ),
                       ),
-                      const Divider(color: Colors.white10, height: 30),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          _infoTile("SEVERITY", _severity),
-                          _infoTile("PRIORITY", _priority),
-                        ],
-                      ),
-                      const Spacer(),
-
-                      // CONFIRM BUTTON
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.cyanAccent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                          ),
-                          onPressed: () async {
-                            // Turn on the "Switch" for the animation
-                            setState(() => _showSuccess = true);
-
-                            // Wait for the animation to play
-                            await Future.delayed(const Duration(seconds: 2));
-
-                            if (mounted) {
-                              Navigator.popUntil(
-                                context,
-                                (route) => route.isFirst,
-                              );
-                            }
-                          },
-                          child: const Text(
-                            "CONFIRM & SUBMIT",
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
+                      if (_isAnalyzing) const Spacer(),
+                      if (_isAnalyzing)
+                        const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.cyanAccent,
                           ),
                         ),
-                      ),
                     ],
                   ),
+                  if (_aiFailed) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      "Neural network could not identify the issue. Please provide manual input below.",
+                      style: TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                    const SizedBox(height: 15),
+                    DropdownButtonFormField<String>(
+                      dropdownColor: const Color(0xFF161B22),
+                      value: _selectedCategory,
+                      hint: const Text(
+                        "Select manually...",
+                        style: TextStyle(color: Colors.white38),
+                      ),
+                      items: _categories
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(
+                                c,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (val) =>
+                          setState(() => _selectedCategory = val),
+                      decoration: _inputDecoration("Manual Classification"),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            // PRIORITY & SEVERITY
+            Row(
+              children: [
+                Expanded(
+                  child: _buildInfoCard(
+                    "PRIORITY",
+                    _getPriority(_selectedCategory),
+                    _selectedCategory == null
+                        ? Colors.white24
+                        : Colors.orangeAccent,
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: _buildInfoCard(
+                    "SEVERITY",
+                    _selectedCategory == null ? "PENDING" : "LEVEL 4/5",
+                    Colors.cyanAccent,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 25),
+
+            _buildSectionHeader("GEO-LOCATION DATA"),
+            _buildReadOnlyField(
+              _coordinates,
+              "GPS Coordinates",
+              Icons.gps_fixed,
+            ),
+            const SizedBox(height: 15),
+            _buildReadOnlyField(_streetName, "Street Name", Icons.map_outlined),
+
+            const SizedBox(height: 40),
+
+            // SUBMIT BUTTON
+            Container(
+              width: double.infinity,
+              height: 60,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(15),
+                gradient: _selectedCategory == null
+                    ? null
+                    : const LinearGradient(
+                        colors: [Color(0xFF00E5FF), Color(0xFF00838F)],
+                      ),
+                color: _selectedCategory == null ? Colors.white10 : null,
+              ),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                ),
+                onPressed: _selectedCategory == null
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("Report Logged to Database"),
+                          ),
+                        );
+                      },
+                child: const Text(
+                  "SUBMIT REPORT",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          // 3. THE GLASSMORPHISM SUCCESS OVERLAY
-          if (_showSuccess) _buildSuccessOverlay(),
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 5),
+      child: Text(
+        title,
+        style: const TextStyle(
+          color: Colors.white38,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyField(String value, String label, IconData icon) {
+    return TextField(
+      controller: TextEditingController(text: value),
+      readOnly: true,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: _inputDecoration(label).copyWith(
+        prefixIcon: Icon(
+          icon,
+          color: Colors.cyanAccent.withOpacity(0.5),
+          size: 18,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(String title, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(15),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white38, fontSize: 10),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // SUCCESS OVERLAY UI
-  Widget _buildSuccessOverlay() {
-    return Positioned.fill(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12), // The Glass Blur
-        child: Container(
-          color: Colors.black.withOpacity(0.7),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TweenAnimationBuilder(
-                  duration: const Duration(milliseconds: 700),
-                  tween: Tween<double>(begin: 0, end: 1),
-                  curve: Curves.elasticOut, // Gives it a nice bounce
-                  builder: (context, double value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.cyanAccent.withOpacity(0.1),
-                          border: Border.all(
-                            color: Colors.cyanAccent,
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          color: Colors.cyanAccent,
-                          size: 80,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 30),
-                const Text(
-                  "REPORT FILED",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 4,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  "Thank you for helping the community!",
-                  style: TextStyle(color: Colors.white54, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-        ),
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.05),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white10),
       ),
-    );
-  }
-
-  // HELPER FOR INFO TILES
-  Widget _infoTile(String title, String value) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 10),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.cyanAccent),
+      ),
     );
   }
 }
