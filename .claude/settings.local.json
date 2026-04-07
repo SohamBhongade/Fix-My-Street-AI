@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find C:/Users/soham/Desktop/Fix-My-Street-AI-main/lib -type f -name *.dart)"
+    ]
+  }
+}
